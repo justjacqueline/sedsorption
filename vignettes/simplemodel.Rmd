@@ -7,157 +7,44 @@ output: html_document
 ## Package dependencies
 setwd("~/Desktop/Professional/sedsorption_model")
 ```{r}
+#devtools::install()
 devtools::load_all()
 library(deSolve)
-library("FME")
+library(FME)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 
 ```
 
-
-# Model structure
-
-## Parameter names & Equations 
-
-### Change in mass over time (mg/hr)
-- dDS = change in Dismal Swamp DOC mass in solution over time
-- dLT = change in wetland CDOC mass in solution over time
-- dNC = change in wetland NCDOC mass in solution over time
-### Rate parameters (hr-1)
-- kdDS, kdLT, kdNC = desorption rate
-- kaDS, kaLT, kaNC = adsorption rate
-### State Variables (mg)
-- DSs, LTs, NCs = sediment Dismal Swamp DOC, wetland CDOC, and wetland NCDOC mass
-- DSw, LTw, NCw = water Dismal Swamp DOC, wetland CDOC, and wetland NCDOC mass
-### First order ODEs 
-- dDSw <- kdDS * DSs - kaDS * DSw #del mass of GDS DOC in solution
-- dLTw <- kdLT * LTs - kaLT * LTw #del mass of sediment CDOC in solution -- colored
-- dNCw <- kdNC * NCs - kaNC * NCw #del mass of sediment NCDOC in solution -- non-colored
-- dDSs <- kaDS * DSw - kdDS * DSs #del mass of GDS DOC on sediment
-- dLTs <- kaLT * LTw - kdLT * LTs #del mass of sediment CDOC on sediment -- colored 
-- dNCs <- kaNC * NCw - kdNC * NCs #del mass of sediment NCDOC on sediment -- non-colored
-- change in mass over time is equal to the addition from desorption and loss via adsorption at every time step
-### ID names
-- JB__ or TA__ = kinetic experiments
-  - JB = Jug Bay
-  - TA = Taskinas
-- W___ or P___ = spatial kinetic experiments
-  - W = shallow, P = deep
-  - C = creek edge, I = intermediate site, M = high marsh
-- __HF, __HS, __LF, __LS = scenario
-  - HF = High initial [DOC], Fresh
-  - HS = High initial [DOC], Saline
-  - LF = Low initial [DOC], Fresh
-  - LS = Low initial [DOC], Saline
-- 1-7 = time points
-  - 1 = 0 min, 2 = 10 min, 3 = 15 min, 4 = 1 hr, 5 = 6 hr, 6 = 12 hr, 7 = 24 hr
-
-
-## Compartment Model 
-### List the six state variable ODEs
-```{r}
-threecomp <- function (time, y, parms, ...) {
-   with(as.list(c(parms, y)), {
-   dDSw <- kdDS*DSs - kaDS*DSw 
-   dLTw <- kdLT*LTs - kaLT*LTw 
-   dNCw <- kdNC*NCs - kaNC*NCw 
-   dDSs <- kaDS*DSw - kdDS*DSs 
-   dLTs <- kaLT*LTw - kdLT*LTs 
-   dNCs <- kaNC*NCw - kdNC*NCs
-   list(c(dDSw, dLTw, dNCw, dDSs, dLTs, dNCs))})}
-
-twocomp <- function (time, y, parms, ...) {
-   with(as.list(c(parms, y)), {
-   dDSw <- kdDS*DSs - kaDS*DSw 
-   dNCw <- kdNC*NCs - kaNC*NCw 
-   dDSs <- kaDS*DSw - kdDS*DSs 
-   dNCs <- kaNC*NCw - kdNC*NCs
-   list(c(dDSw, dNCw, dDSs, dNCs))})}
-```
-
-# Data organization
-## Time
-
-- Time will always stay the same 7 values: 0, 0.17, 0.25, 1, 6, 12, 24
-- hours
-
-## Observed values
-
-- Only have measured observed values for DSw, LTw, and NCw 
-- These will change with every scenario -- need to input these data
-
-## Initial Values for model
-
-- Six y0 values for DSw, LTw, NCw, DSs, LTs, NCs
-- These will change with every scenario -- need to input these data
-- Rate parameter k's might change but the first guess could be the same for each
-
-### Using dplyr to manipulate the data
-- Try to use .csv as default file formats
-- Try not to have spaces or unconventional characters in title names
-- Remember that initial values must be in  the same order as the ODE order (Use %>% select())
-- data.frame <- as.numeric changes data to vector
-- Use str() to compare the data types 
-
 ## Read in time, y0, and obs values
 ```{r}
+y0_path <- system.file("data-raw", "y0_master.csv", package = "sedsorption") 
+
+obs_path <- system.file("data-raw", "simpmodel_obs.csv", package = "sedsorption") 
 
 time_pts <- c(0, 0.17, 0.25, 1, 6, 12, 24)
 
-y0df <- read.csv("C:/Users/Hannah/Desktop/kinetics/Simple Model/y0_master.csv")
-y0df <- y0df[,c(1,2,4,5,7)]
+y0df <- read.csv(y0_path)
+#y0df <- y0df[,c(1,2,4,5,7)]
 
-obs <- read.csv("C:/Users/Hannah/Desktop/kinetics/Simple Model/simpmodel_obs.csv")
-
+obs <- read.csv(obs_path)
 obs2 <- obs %>% separate(X, c("exp", "time"), 4)
 
 
 ```
 
-## Use dplyr and tidyr to select the observational data for the experiment
-### Examples
-
-- #JHF <- y0df %>% filter(X == "JBHF")
-- obs2 <- obs %>% separate(X, c("exp", "time"), 4) -- breaks one column into two at the fourth character
-- #JHF <- obs2 %>% filter(exp == "JBHF")
-- # obs3 <- obs2 %>% mutate(time = c(0,0.17,0.25,1,6,12,24)) -- adds time to data frame if it wasn't already there
-
-# Rate Parameters
 ```{r}
-# The sequence for the model - needs the rates, model time output, y0 values
-
-#parms <- c(kdDS = 0.74, kaDS = 0.35, kdLT = -3.9e-13, kaLT = 34.9, kdNC = 13.2,  kaNC = -11.5) #guess at k's
-#times <- seq(0, 24, length=200)
-#y0 <- c(DSw = 8.867, LTw = 0, NCw = 0, DSs = 0, LTs = 0, NCs = 0.16)
-#out1 <- ode(y0, times, threecomp, parms)
-#plot(out1) #), obs=dat)
-```
-
-# Cost Function 
-```{r}
-cost <- function(p, dat) {
-    out <- ode(y0, times, threecomp, p)
-    modCost(out, dat, weight = "none")} # try weight = "std" or "mean"
-```
- 
-# Fit the Model 
-```{r}
-#fit <- modFit(f = cost, p = parms)
- #summary(fit)
-```
-
-```{r}
-
 #ans <- lapply(1:nrow(y0df), function(x){    #do all rows
 #ans <- lapply(c(1,3), function(x){          #try just rows 1 and 3
-site = "JBHF"                                #try just one site 
+site = "JBHF"                                #try just one site  # This site needs to run the 2-compartment model
+site <- "TAHS"
+site <- "JBHS"
 #  site <- as.character(y0df$X[x])
   dat <- obs2 %>% filter(exp == site) %>% mutate(time = time_pts)
   print(dat)
-  #parms <- c(kdDS = 0.1, kaDS = 0.1, kdLT = 0, kaLT = 0, kdNC = 0.1,  kaNC = 0.1) #guess at k's
-  parms <- c(kdDS = 0.1, kaDS = 0.1, kdNC = 0.1,  kaNC = 0.1) #guess at k's
+  parms <- c(kdDS = 0.1, kaDS = 0.1, kdLT = 0, kaLT = 0, kdNC = 0.1,  kaNC = 0.1) #guess at k's
+  #parms <- c(kdDS = 0.1, kaDS = 0.1, kdNC = 0.1,  kaNC = 0.1) #guess at k's
   print(parms)
   times <- seq(0, 24, length=200)
   y0 <- y0df %>% filter(X == site) # filter out from y0 master
@@ -171,7 +58,11 @@ site = "JBHF"                                #try just one site
   
   out1 <- ode(y0, times, threecomp, parms)
   plot(out1) #), obs=dat)
+  
+  
+  
   fit <- modFit(f = cost, p = parms, dat = dat3)
+  fit <- modFit(f = cost, p = parms, dat = dat3, times_out = times, model = threecomp, initial = y0)
   summary(fit)
   
   par = data.frame(as.list(fit$par)) %>% mutate(X = site)
@@ -183,12 +74,6 @@ all_ans <- bind_rows(ans) #binds all the rows into one data.frame that can be sa
 # try starting with different initial parameter values to see if there are different local minima for best parameters
 # may want to make our own plots next week - yaay ggplot!
 ```
-
-```{r}
-#rm(list = ls())  # Clean up
-
-```
-
 
 # Plots
 ## plot model & observations for DSw, LTw, NCw, TDOC concentrations over time
