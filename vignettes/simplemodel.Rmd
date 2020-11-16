@@ -23,7 +23,7 @@ y0_path <- system.file("data-raw", "y0_master.csv", package = "sedsorption")
 
 obs_path <- system.file("data-raw", "simpmodel_obs.csv", package = "sedsorption") 
 
-time_pts <- c(0, 0.17, 0.25, 1, 6, 12, 24)
+time_pts <- c(0, 0.17, 0.25, 1, 6, 12, 24) + .05
 
 y0df <- read.csv(y0_path)
 #y0df <- y0df[,c(1,2,4,5,7)]
@@ -40,13 +40,18 @@ obs2 <- obs %>% separate(X, c("exp", "time"), 4)
 site = "JBHF"                                #try just one site  # This site needs to run the 2-compartment model
 site <- "TAHS"
 site <- "JBHS"
+site <- "TALF"
+site <- y0df$X[10]
 #  site <- as.character(y0df$X[x])
   dat <- obs2 %>% filter(exp == site) %>% mutate(time = time_pts)
   print(dat)
   parms <- c(kdDS = 0.1, kaDS = 0.1, kdLT = 0, kaLT = 0, kdNC = 0.1,  kaNC = 0.1) #guess at k's
-  #parms <- c(kdDS = 0.1, kaDS = 0.1, kdNC = 0.1,  kaNC = 0.1) #guess at k's
+    parms <- c(kdDS = 0.1, kaDS = 0.1, kdLT = 0.1, kaLT = 0.1, kdNC = 0.1,  kaNC = 0.1) #guess at k's
+ #   parms <- c(kdDS = 1, kaDS = 1, kdLT = 1, kaLT = 1, kdNC = 1,  kaNC = 1) #guess at k's
+#  parms <- c(kdDS = 0.1, kaDS = 0.1, kdNC = 0.1,  kaNC = 0.1) #guess at k's
   print(parms)
-  times <- seq(0, 24, length=200)
+  times <- seq(0, 24, length=10000)
+  times <- seq(0,24,length = 200)
   y0 <- y0df %>% filter(X == site) # filter out from y0 master
   y0 <- data.matrix(y0) #makes the data frame a numeric
   y0 <- y0[,-1] #get rid of X label column
@@ -55,14 +60,16 @@ site <- "JBHS"
  
   dat3 <- dat2 %>% select_if(~sum(.)!=0)
   #takes dat2 and looks for a column whose sum is 0 then keeps columns that are not
+  #  tempdat <- data.frame(time=0, DSw=y0[["DSw"]], LTw=y0[["LTw"]], NCw=y0[["NCw"]])
+#  dat3 <- rbind(tempdat,dat3)
   
   out1 <- ode(y0, times, threecomp, parms)
   plot(out1) #), obs=dat)
   
   
   
-  fit <- modFit(f = cost, p = parms, dat = dat3)
-  fit <- modFit(f = cost, p = parms, dat = dat3, times_out = times, model = threecomp, initial = y0)
+  #fit <- modFit(f = cost, p = parms, dat = dat3)
+  fit <- modFit(f = cost, p = parms, dat = dat3, times_out = times, model = threecomp, initial = y0, lower = rep(0.0,6))
   summary(fit)
   
   par = data.frame(as.list(fit$par)) %>% mutate(X = site)
