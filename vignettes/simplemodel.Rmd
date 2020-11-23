@@ -33,25 +33,34 @@ obs2 <- obs %>% separate(X, c("exp", "time"), 4)
 
 
 ```
+! Outstanding errors to solve:
+1. non-invertible matrix: Could try adding small value to 0s
+2. modFit does not return value for some sites
+- site <- "JBHF"  # LTw will be removed because of all 0s # This site needs to run the 2-compartment model
+- site <- "JBLS" #this will remove DSw # this was not working if we select out data columns # unsure why
+- site <- "PIHF" # this isn't working
+- site <- "PILF" # this isn't working
+Possible things to try:
+- Add time = 0 to dat3
+- Add small values to 0
+- Understand modFit
+
 
 ```{r}
 #ans <- lapply(1:nrow(y0df), function(x){    #do all rows
 #ans <- lapply(c(1,3), function(x){          #try just rows 1 and 3
-site = "JBHF"                                #try just one site  # This site needs to run the 2-compartment model
-site <- "TAHS"
-site <- "JBHS"
-site <- "TALF"
+
 site <- y0df$X[10]
-#  site <- as.character(y0df$X[x])
+#  site <- as.character(y0df$X[x])   #to use in loop
   dat <- obs2 %>% filter(exp == site) %>% mutate(time = time_pts)
   print(dat)
   parms <- c(kdDS = 0.1, kaDS = 0.1, kdLT = 0, kaLT = 0, kdNC = 0.1,  kaNC = 0.1) #guess at k's
-    parms <- c(kdDS = 0.1, kaDS = 0.1, kdLT = 0.1, kaLT = 0.1, kdNC = 0.1,  kaNC = 0.1) #guess at k's
- #   parms <- c(kdDS = 1, kaDS = 1, kdLT = 1, kaLT = 1, kdNC = 1,  kaNC = 1) #guess at k's
+  parms <- c(kdDS = 0.1, kaDS = 0.1, kdLT = 0.1, kaLT = 0.1, kdNC = 0.1,  kaNC = 0.1) #guess at k's
+  parms <- c(kdDS = 1, kaDS = 1, kdLT = 1, kaLT = 1, kdNC = 1,  kaNC = 1) #guess at k's
 #  parms <- c(kdDS = 0.1, kaDS = 0.1, kdNC = 0.1,  kaNC = 0.1) #guess at k's
   print(parms)
-  times <- seq(0, 24, length=10000)
-  times <- seq(0,24,length = 200)
+  times <- seq(0, 24, length = 10000)
+  times <- seq(0,24,length = 1000)
   y0 <- y0df %>% filter(X == site) # filter out from y0 master
   y0 <- data.matrix(y0) #makes the data frame a numeric
   y0 <- y0[,-1] #get rid of X label column
@@ -59,14 +68,14 @@ site <- y0df$X[10]
   dat2 = dat %>% select(time, DSw, LTw, NCw)
  
   dat3 <- dat2 %>% select_if(~sum(.)!=0)
+  dat3 <- dat2
+  dat3 <- dat2 %>% select(-LTw)
   #takes dat2 and looks for a column whose sum is 0 then keeps columns that are not
   #  tempdat <- data.frame(time=0, DSw=y0[["DSw"]], LTw=y0[["LTw"]], NCw=y0[["NCw"]])
 #  dat3 <- rbind(tempdat,dat3)
   
   out1 <- ode(y0, times, threecomp, parms)
   plot(out1) #), obs=dat)
-  
-  
   
   #fit <- modFit(f = cost, p = parms, dat = dat3)
   fit <- modFit(f = cost, p = parms, dat = dat3, times_out = times, model = threecomp, initial = y0, lower = rep(0.0,6))
